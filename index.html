@@ -147,7 +147,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f1f5f9;color:#1e293b;h
 
 <script>
 var CONFIG = {
-  apiToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ1NjA4NTcwMSwiYWFpIjoxMSwidWlkIjo2OTYyOTM1MSwiaWFkIjoiMjAyNS0wMS0xMFQwNjoyMTozMi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6NjQzMTgxMCwicmduIjoidXNlMSJ9.CaVqnG51LtzKP4MTxXCflpqaZA64n0TvS6DzmK-7R84',
+  apiToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ1NjA4NTcwMSwiYWFpIjoxMSwidWlkIjo2OTYyOTM1MSwiaWFkIjoiMjAyNS0wMS0xMFQwNjoyMTozMi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6NjQzMTgxMCwicmduIjoidXNlMSJ9.CaVqnG51LtzKP4MTxXCflpqaZA64n0TvS6DzmK-7R84
+',
   boardId:  '18408062519',
   timezone: 'Australia/Sydney'
 };
@@ -419,7 +420,7 @@ function fetchItems(colMap) {
 }
 
 function fetchDetail(itemId) {
-  return api('{ items(ids:[' + itemId + ']) { id name group { id title color } assets { id name url public_url file_extension } updates(limit:50) { id text_body created_at creator { id name } replies { id text_body created_at creator { id name } } } column_values { id value text } } }')
+  return api('{ items(ids:[' + itemId + ']) { id name group { id title color } assets { id name url public_url file_extension } updates(limit:50) { id text_body created_at creator { id name } replies { id text_body created_at creator { id name } } } column_values { id text value ... on StatusValue { label index } } } }')
     .then(function(d) { return (d && d.items && d.items[0]) || null; });
 }
 
@@ -725,22 +726,22 @@ function renderDetailPanel(raw) {
     var allMatched = allBoardCols.filter(function(c) { return WANTED_TITLES.indexOf(c.title.toLowerCase()) !== -1; });
     var statusFields = allMatched.map(function(c) {
         var match = rawCV.find(function(r){ return r.id === c.id; });
-        var text = match ? (match.text || '').trim() : '';
-
-        // If text is empty, resolve via settings_str labels + value index
-        // monday status value: {"index": N} — label lives in column settings
-        if (!text && match && match.value) {
-          try {
-            var v = JSON.parse(match.value);
-            var idx = v.index;
-            if (idx !== null && idx !== undefined && c.settings_str) {
-              var settings = JSON.parse(c.settings_str);
-              var labels = settings.labels || settings.labels_colors || {};
-              text = (labels[String(idx)] || '').trim();
-            }
-          } catch(e2) {}
+        // Try in order: StatusValue.label (from inline fragment), text field, settings_str index lookup
+        var text = '';
+        if (match) {
+          text = (match.label || match.text || '').trim();
+          if (!text && match.value) {
+            try {
+              var v = JSON.parse(match.value);
+              var idx = v.index;
+              if (idx !== null && idx !== undefined && c.settings_str) {
+                var settings = JSON.parse(c.settings_str);
+                var labels = settings.labels || {};
+                text = (labels[String(idx)] || '').trim();
+              }
+            } catch(e2) {}
+          }
         }
-
         return { id: c.id, label: c.title, value: text };
       });
     if (statusFields.length) {

@@ -707,8 +707,11 @@ function renderDetailPanel(raw) {
       pb.appendChild(wrap2);
       var orow = el('div','p-open-row');
       var olink = document.createElement('a');
-      olink.className = 'p-open-link'; olink.textContent = 'Open file';
-      olink.addEventListener('click', function(e){ e.preventDefault(); window.open(primary.url,'_blank','noopener,noreferrer'); });
+      olink.className = 'p-open-link';
+      olink.textContent = 'Open file ↗';
+      olink.href = primary.url;
+      olink.target = '_blank';
+      olink.rel = 'noopener noreferrer';
       orow.appendChild(olink); pb.appendChild(orow);
     }
   } else {
@@ -951,7 +954,8 @@ function buildAssetCard(asset) {
 // ── Lightbox ───────────────────────────────────────────────
 function openLightbox(asset) {
   $('lb-name').textContent = asset.name;
-  $('lb-open').onclick = function(e){ e.preventDefault(); window.open(asset.url,'_blank','noopener,noreferrer'); };
+  $('lb-open').href = asset.url;
+  $('lb-open').target = '_blank';
   var media = $('lb-media'); media.innerHTML = '';
   renderMedia(asset, media, true);
   $('lightbox').classList.add('open');

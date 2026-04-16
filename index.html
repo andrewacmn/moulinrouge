@@ -366,13 +366,9 @@ function statusColour(s) {
 }
 
 // ── Column map ─────────────────────────────────────────────
-var COL_KEY = 'cc_v10_' + (CONFIG.boardId || 'x');
+var COL_KEY = 'cc_v9_' + (CONFIG.boardId || 'x');
 var saveMap = function(m) { try { localStorage.setItem(COL_KEY, JSON.stringify(m)); } catch(e){} };
 var loadMap = function() { try { return JSON.parse(localStorage.getItem(COL_KEY)); } catch(e){ return null; } };
-// Clear any old cache keys from previous versions
-['cc_v9_','cc_v8_','cc_v7_','cc_v6_','cc_v5_','cc_v4_','cc_v3_'].forEach(function(k){
-  try { localStorage.removeItem(k + (CONFIG.boardId||'x')); } catch(e){}
-});
 
 function autoMap(cols) {
   var find = function(fn) { var c = cols.find(fn); return c ? c.id : ''; };
@@ -476,13 +472,14 @@ function parseItem(raw, colMap) {
       if (files.length) out.assets = files;
     }
   });
-  // Only fall back to item-level monday assets — never scan other columns
-  // (avoids concept link being mistaken for a file asset)
+  if (!out.assets.length) {
+    for (var i = 0; i < cv.length; i++) {
+      var files2 = extractFiles(cv[i].value, raw.name);
+      if (files2.length) { out.assets = files2; break; }
+    }
+  }
   if (!out.assets.length && raw.assets && raw.assets.length) {
-    out.assets = normaliseAssets(raw.assets).filter(function(a) {
-      // Only include actual uploaded files, not link-type assets
-      return a.url && !a.url.includes('docs.google.com') && !a.url.includes('slides.google.com');
-    });
+    out.assets = normaliseAssets(raw.assets);
   }
   return out;
 }
@@ -717,21 +714,21 @@ function renderDetailPanel(raw) {
     var empty = el('div','p-preview-empty'); pb.appendChild(empty);
   }
 
-  // Status dropdowns — find ONLY the three specific columns by title
-  // This is the only reliable approach; type-based detection always grabs too many columns
-  var WANTED_TITLES = ['concept status', 'asset status', 'production status', 'copy status'];
+  // Status dropdowns from all color/status columns
   try {
     var rawCV = item._rawCols || [];
-    // DEBUG: log all board columns so we can see what's coming back
-    console.log('[STATUS DEBUG] allBoardCols:', allBoardCols.map(function(c){ return c.title + '|' + c.type; }));
-    console.log('[STATUS DEBUG] WANTED_TITLES:', WANTED_TITLES);
-    var allMatched = allBoardCols.filter(function(c) { return WANTED_TITLES.indexOf(c.title.toLowerCase()) !== -1; });
-    console.log('[STATUS DEBUG] matched:', allMatched.map(function(c){ return c.title; }));
-    var statusFields = allMatched.map(function(c) {
-        var match = rawCV.find(function(r){ return r.id === c.id; });
-        var text = match ? (match.text || '').trim() : '';
-        return { id: c.id, label: c.title, value: text };
-      });
+    var statusFields = allBoardCols.map(function(c) {
+      var match = rawCV.find(function(r){ return r.id === c.id; });
+      var text = match ? (match.text || '').trim() : '';
+      if (!text || !match || !match.value) return null;
+      try {
+        var v = JSON.parse(match.value);
+        if (v && typeof v === 'object' && (v.index !== undefined || v.label !== undefined || v.style !== undefined)) {
+          return { id: c.id, label: c.title, value: text };
+        }
+      } catch(e2) {}
+      return null;
+    }).filter(Boolean);
     if (statusFields.length) {
       pb.appendChild(pdiv());
       var row = el('div','p-status-row');
@@ -739,14 +736,9 @@ function renderDetailPanel(raw) {
         var field = el('div','p-field');
         var flbl = document.createElement('label'); flbl.textContent = sf.label; field.appendChild(flbl);
         var sel = document.createElement('select');
-        var base = ['','Pending','To Be Briefed','To Be Written','To Be Scheduled','Ready For Client Review','Ready for Client Review','In Production','Approved','Amends Required','On Hold','Cancelled','Scheduled'];
-        var seen = {};
-        if (sf.value) seen[sf.value] = 1;
-        [sf.value].concat(base).forEach(function(o){
-          if (o === '' && !sf.value) { var opt = new Option('— not set —',''); seen['']=1; sel.appendChild(opt); return; }
-          if (o && !seen[o]){seen[o]=1;sel.appendChild(new Option(o,o));}
-        });
-        sel.value = sf.value || '';
+        var base = ['Pending','To Be Briefed','To Be Written','To Be Scheduled','Ready For Client Review','Ready for Client Review','In Production','Approved','Amends Required','On Hold','Cancelled','Scheduled'];
+        var seen = {}; [sf.value].concat(base).forEach(function(o){ if(!seen[o]){seen[o]=1;sel.appendChild(new Option(o,o));} });
+        sel.value = sf.value;
         sel.style.cssText = 'font-weight:600;color:' + statusColour(sf.value) + ';';
         (function(colId) {
           sel.addEventListener('change', function() {

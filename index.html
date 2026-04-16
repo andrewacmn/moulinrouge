@@ -2,25 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>Monday Status Panel</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Content Calendar</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-body{font-family:'Inter',sans-serif;background:#f1f5f9;margin:0}
+body{font-family:Arial;background:#f3f4f6;margin:0}
 #app{display:flex;height:100vh}
-#list{width:40%;overflow:auto;background:#fff;border-right:1px solid #e2e8f0}
+#list{width:35%;background:#fff;border-right:1px solid #ddd;overflow:auto}
 #panel{flex:1;padding:20px;overflow:auto}
 .item{padding:12px;border-bottom:1px solid #eee;cursor:pointer}
-.item:hover{background:#f8fafc}
-.field{margin-bottom:12px}
-label{font-size:11px;color:#64748b;display:block;margin-bottom:4px}
-select{width:100%;padding:6px;border:1px solid #e2e8f0;border-radius:6px}
+.item:hover{background:#f9fafb}
+.field{margin-bottom:16px}
+label{font-size:12px;color:#6b7280;display:block;margin-bottom:6px}
+select{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px}
 </style>
 </head>
 <body>
 
 <script>
-var CONFIG = {
+const CONFIG = {
   apiToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ1NjA4NTcwMSwiYWFpIjoxMSwidWlkIjo2OTYyOTM1MSwiaWFkIjoiMjAyNS0wMS0xMFQwNjoyMTozMi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6NjQzMTgxMCwicmduIjoidXNlMSJ9.CaVqnG51LtzKP4MTxXCflpqaZA64n0TvS6DzmK-7R84',
   boardId:  '18408062519'
 };
@@ -34,28 +33,60 @@ var CONFIG = {
 <script>
 const $ = id => document.getElementById(id);
 
-/* ================= API ================= */
-
-function api(query){
-  return fetch('https://api.monday.com/v2',{
+async function api(query){
+  const res = await fetch('https://api.monday.com/v2',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
       'Authorization':CONFIG.apiToken
     },
     body:JSON.stringify({query})
-  })
-  .then(r=>r.json())
-  .then(r=>{
-    if(r.errors) throw new Error(r.errors[0].message);
-    return r.data;
   });
+  const json = await res.json();
+  if(json.errors) throw new Error(json.errors[0].message);
+  return json.data;
 }
-
-/* ================= LOAD ================= */
 
 let columns = [];
 let items = [];
+
+/* ========= STATUS HELPERS ========= */
+
+function getStatusLabel(col, match){
+  if(!match) return '';
+
+  // ✅ FIX: text FIRST
+  if(match.text && match.text.trim()){
+    return match.text.trim();
+  }
+
+  // fallback
+  if(match.value){
+    try{
+      const parsed = JSON.parse(match.value);
+
+      if(parsed.label) return parsed.label;
+
+      if(parsed.index !== undefined){
+        const settings = JSON.parse(col.settings_str || '{}');
+        return settings.labels?.[parsed.index] || '';
+      }
+    }catch(e){}
+  }
+
+  return '';
+}
+
+function getStatusOptions(col){
+  try{
+    const s = JSON.parse(col.settings_str || '{}');
+    return Object.values(s.labels || {});
+  }catch(e){
+    return [];
+  }
+}
+
+/* ========= INIT ========= */
 
 async function init(){
   const colRes = await api(`
@@ -96,36 +127,7 @@ async function init(){
   renderList();
 }
 
-/* ================= STATUS LOGIC ================= */
-
-function getStatusLabel(col, match) {
-  if (!match) return '';
-
-  // ✅ PRIMARY: use text (this is what Monday UI shows)
-  if (match.text && match.text.trim()) {
-    return match.text.trim();
-  }
-
-  // 🔁 Fallback: try value JSON
-  if (match.value) {
-    try {
-      var parsed = JSON.parse(match.value);
-
-      if (parsed.label) return parsed.label;
-
-      if (parsed.index !== undefined && col.settings_str) {
-        var settings = JSON.parse(col.settings_str);
-        if (settings.labels && settings.labels[parsed.index]) {
-          return settings.labels[parsed.index];
-        }
-      }
-    } catch (e) {}
-  }
-
-  return '';
-}
-
-/* ================= UI ================= */
+/* ========= UI ========= */
 
 function renderList(){
   $('list').innerHTML = items.map(i =>
@@ -135,13 +137,20 @@ function renderList(){
 
 function openItem(id){
   const item = items.find(i=>i.id==id);
-  const statusCols = columns.filter(c=>c.type==='status');
+
+  // ONLY THESE 3
+  const wanted = ['concept status','asset status','copy status'];
+
+  const statusCols = columns.filter(c =>
+    c.type === 'status' &&
+    wanted.includes(c.title.toLowerCase())
+  );
 
   let html = `<h2>${item.name}</h2>`;
 
   statusCols.forEach(col=>{
     const cv = item.column_values.find(v=>v.id===col.id);
-    const value = getStatusLabel(col, cv?.value);
+    const value = getStatusLabel(col, cv);
 
     const options = getStatusOptions(col);
 
@@ -161,7 +170,7 @@ function openItem(id){
   $('panel').innerHTML = html;
 }
 
-/* ================= UPDATE ================= */
+/* ========= UPDATE ========= */
 
 function updateStatus(itemId, colId, value){
   api(`
@@ -176,7 +185,7 @@ function updateStatus(itemId, colId, value){
   `).catch(console.error);
 }
 
-/* ================= START ================= */
+/* ========= START ========= */
 
 init();
 </script>

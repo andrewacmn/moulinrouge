@@ -728,6 +728,11 @@ function renderDetailPanel(raw) {
     var allMatched = allBoardCols.filter(function(c) { return WANTED_TITLES.indexOf(c.title.toLowerCase()) !== -1; });
     console.log('[STATUS DEBUG] matched:', allMatched.map(function(c){ return c.title; }));
     console.log('[STATUS DEBUG] statusFields count will be:', allMatched.length);
+    // Show what rawCV has for each matched column
+    allMatched.forEach(function(c) {
+      var match = rawCV.find(function(r){ return r.id === c.id; });
+      console.log('[STATUS DEBUG] col "' + c.title + '" id=' + c.id + ' match:', match ? JSON.stringify(match) : 'NOT FOUND');
+    });
     var statusFields = allMatched.map(function(c) {
         var match = rawCV.find(function(r){ return r.id === c.id; });
         var text = match ? (match.text || '').trim() : '';

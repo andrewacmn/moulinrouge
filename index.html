@@ -722,11 +722,12 @@ function renderDetailPanel(raw) {
   var WANTED_TITLES = ['concept status', 'asset status', 'production status', 'copy status'];
   try {
     var rawCV = item._rawCols || [];
-    // DEBUG: log all board columns so we can see what's coming back
+    console.log('[VERSION] 2026-04-16-v3');
     console.log('[STATUS DEBUG] allBoardCols:', allBoardCols.map(function(c){ return c.title + '|' + c.type; }));
     console.log('[STATUS DEBUG] WANTED_TITLES:', WANTED_TITLES);
     var allMatched = allBoardCols.filter(function(c) { return WANTED_TITLES.indexOf(c.title.toLowerCase()) !== -1; });
     console.log('[STATUS DEBUG] matched:', allMatched.map(function(c){ return c.title; }));
+    console.log('[STATUS DEBUG] statusFields count will be:', allMatched.length);
     var statusFields = allMatched.map(function(c) {
         var match = rawCV.find(function(r){ return r.id === c.id; });
         var text = match ? (match.text || '').trim() : '';

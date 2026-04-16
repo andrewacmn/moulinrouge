@@ -147,8 +147,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#f1f5f9;color:#1e293b;h
 
 <script>
 var CONFIG = {
-  apiToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ1NjA4NTcwMSwiYWFpIjoxMSwidWlkIjo2OTYyOTM1MSwiaWFkIjoiMjAyNS0wMS0xMFQwNjoyMTozMi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6NjQzMTgxMCwicmduIjoidXNlMSJ9.CaVqnG51LtzKP4MTxXCflpqaZA64n0TvS6DzmK-7R84
-',
+  apiToken: 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ1NjA4NTcwMSwiYWFpIjoxMSwidWlkIjo2OTYyOTM1MSwiaWFkIjoiMjAyNS0wMS0xMFQwNjoyMTozMi4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6NjQzMTgxMCwicmduIjoidXNlMSJ9.CaVqnG51LtzKP4MTxXCflpqaZA64n0TvS6DzmK-7R84',
   boardId:  '18408062519',
   timezone: 'Australia/Sydney'
 };
@@ -405,7 +404,7 @@ function api(query) {
 }
 
 function fetchColumns() {
-  return api('{ boards(ids:[' + CONFIG.boardId + ']) { columns { id title type settings_str } } }')
+  return api('{ boards(ids:[' + CONFIG.boardId + ']) { columns { id title type } } }')
     .then(function(d) {
       var cols = d && d.boards && d.boards[0] && d.boards[0].columns;
       if (!cols || !cols.length) throw new Error('Board not found. Check your board ID.');
@@ -420,7 +419,7 @@ function fetchItems(colMap) {
 }
 
 function fetchDetail(itemId) {
-  return api('{ items(ids:[' + itemId + ']) { id name group { id title color } assets { id name url public_url file_extension } updates(limit:50) { id text_body created_at creator { id name } replies { id text_body created_at creator { id name } } } column_values { id text value ... on StatusValue { label index } } } }')
+  return api('{ items(ids:[' + itemId + ']) { id name group { id title color } assets { id name url public_url file_extension } updates(limit:50) { id text_body created_at creator { id name } replies { id text_body created_at creator { id name } } } column_values { id value text } } }')
     .then(function(d) { return (d && d.items && d.items[0]) || null; });
 }
 
@@ -477,11 +476,9 @@ function parseItem(raw, colMap) {
       if (files.length) out.assets = files;
     }
   });
-  // Only fall back to item-level monday assets — never scan other columns
-  // (avoids concept link being mistaken for a file asset)
+  // Only use item-level monday assets as fallback — never scan other columns
   if (!out.assets.length && raw.assets && raw.assets.length) {
     out.assets = normaliseAssets(raw.assets).filter(function(a) {
-      // Only include actual uploaded files, not link-type assets
       return a.url && !a.url.includes('docs.google.com') && !a.url.includes('slides.google.com');
     });
   }
@@ -718,30 +715,15 @@ function renderDetailPanel(raw) {
     var empty = el('div','p-preview-empty'); pb.appendChild(empty);
   }
 
-  // Status dropdowns — find ONLY the three specific columns by title
-  // This is the only reliable approach; type-based detection always grabs too many columns
+  // Status dropdowns — always show Concept/Asset/Copy Status using text field
   var WANTED_TITLES = ['concept status', 'asset status', 'production status', 'copy status'];
   try {
     var rawCV = item._rawCols || [];
-    var allMatched = allBoardCols.filter(function(c) { return WANTED_TITLES.indexOf(c.title.toLowerCase()) !== -1; });
-    var statusFields = allMatched.map(function(c) {
+    var statusFields = allBoardCols
+      .filter(function(c) { return WANTED_TITLES.indexOf(c.title.toLowerCase()) !== -1; })
+      .map(function(c) {
         var match = rawCV.find(function(r){ return r.id === c.id; });
-        // Try in order: StatusValue.label (from inline fragment), text field, settings_str index lookup
-        var text = '';
-        if (match) {
-          text = (match.label || match.text || '').trim();
-          if (!text && match.value) {
-            try {
-              var v = JSON.parse(match.value);
-              var idx = v.index;
-              if (idx !== null && idx !== undefined && c.settings_str) {
-                var settings = JSON.parse(c.settings_str);
-                var labels = settings.labels || {};
-                text = (labels[String(idx)] || '').trim();
-              }
-            } catch(e2) {}
-          }
-        }
+        var text = match ? (match.text || '').trim() : '';
         return { id: c.id, label: c.title, value: text };
       });
     if (statusFields.length) {
@@ -751,19 +733,22 @@ function renderDetailPanel(raw) {
         var field = el('div','p-field');
         var flbl = document.createElement('label'); flbl.textContent = sf.label; field.appendChild(flbl);
         var sel = document.createElement('select');
-        var base = ['','Pending','To Be Briefed','To Be Written','To Be Scheduled','Ready For Client Review','Ready for Client Review','In Production','Approved','Amends Required','On Hold','Cancelled','Scheduled'];
+        var base = ['','Pending','To Be Briefed','To Be Written','To Be Scheduled',
+          'Ready For Client Review','Ready for Client Review',
+          'In Production','Approved','Amends Required','On Hold','Cancelled','Scheduled'];
         var seen = {};
-        if (sf.value) seen[sf.value] = 1;
-        [sf.value].concat(base).forEach(function(o){
-          if (o === '' && !sf.value) { var opt = new Option('— not set —',''); seen['']=1; sel.appendChild(opt); return; }
-          if (o && !seen[o]){seen[o]=1;sel.appendChild(new Option(o,o));}
+        base.forEach(function(o) {
+          if (!seen[o]) { seen[o]=1; sel.appendChild(new Option(o===''?'— not set —':o, o)); }
         });
+        if (sf.value && !seen[sf.value]) {
+          sel.insertBefore(new Option(sf.value, sf.value), sel.options[1]);
+        }
         sel.value = sf.value || '';
-        sel.style.cssText = 'font-weight:600;color:' + statusColour(sf.value) + ';';
+        sel.style.cssText = 'font-weight:600;color:' + (sf.value ? statusColour(sf.value) : '#94a3b8') + ';';
         (function(colId) {
           sel.addEventListener('change', function() {
-            sel.style.cssText = 'font-weight:600;color:' + statusColour(sel.value) + ';';
-            updateCol(item.id, colId, sel.value).catch(console.error);
+            sel.style.cssText = 'font-weight:600;color:' + (sel.value ? statusColour(sel.value) : '#94a3b8') + ';';
+            if (sel.value) updateCol(item.id, colId, sel.value).catch(console.error);
           });
         })(sf.id);
         field.appendChild(sel); row.appendChild(field);

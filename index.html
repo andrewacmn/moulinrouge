@@ -98,30 +98,31 @@ async function init(){
 
 /* ================= STATUS LOGIC ================= */
 
-function getStatusLabel(col, val){
-  if(!val) return '';
+function getStatusLabel(col, match) {
+  if (!match) return '';
 
-  try{
-    const parsed = JSON.parse(val);
+  // ✅ PRIMARY: use text (this is what Monday UI shows)
+  if (match.text && match.text.trim()) {
+    return match.text.trim();
+  }
 
-    if(parsed.label) return parsed.label;
+  // 🔁 Fallback: try value JSON
+  if (match.value) {
+    try {
+      var parsed = JSON.parse(match.value);
 
-    if(parsed.index !== undefined){
-      const settings = JSON.parse(col.settings_str || '{}');
-      return settings.labels?.[parsed.index] || '';
-    }
-  }catch(e){}
+      if (parsed.label) return parsed.label;
+
+      if (parsed.index !== undefined && col.settings_str) {
+        var settings = JSON.parse(col.settings_str);
+        if (settings.labels && settings.labels[parsed.index]) {
+          return settings.labels[parsed.index];
+        }
+      }
+    } catch (e) {}
+  }
 
   return '';
-}
-
-function getStatusOptions(col){
-  try{
-    const s = JSON.parse(col.settings_str || '{}');
-    return Object.values(s.labels || {});
-  }catch(e){
-    return [];
-  }
 }
 
 /* ================= UI ================= */

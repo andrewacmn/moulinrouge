@@ -736,6 +736,15 @@ function renderDetailPanel(raw) {
     var statusFields = allMatched.map(function(c) {
         var match = rawCV.find(function(r){ return r.id === c.id; });
         var text = match ? (match.text || '').trim() : '';
+        // If text is empty, try to extract label from the value JSON
+        // Monday status value looks like: {"index":3,"style":{...},"label":"Approved","title":"Approved"}
+        if (!text && match && match.value) {
+          try {
+            var v = JSON.parse(match.value);
+            text = (v.label || v.title || v.text || '').trim();
+          } catch(e2) {}
+        }
+        console.log('[STATUS DEBUG] col "' + c.title + '" text="' + text + '" raw value=' + (match ? match.value : 'NO MATCH'));
         return { id: c.id, label: c.title, value: text };
       });
     if (statusFields.length) {
